@@ -1,6 +1,6 @@
 import udp from "@SignalRGB/udp";
 
-/* global controller, discovery, service, device, ViewMode, AccentColor, BackgroundColor, TargetFPS, Brightness */
+/* global controller, discovery, service, device, ViewMode, AccentColor, BackgroundColor, TargetFPS, Brightness, ShowClock, ShowCPU, ShowRAM, ClockStyle, HeaderText */
 
 const SERVICE_NAME = "Independent LCD Engine";
 const SERVICE_ID = "independent-lcd-engine-local";
@@ -28,6 +28,11 @@ export function DeviceMessage() {
 export function ControllableParameters() {
     return [
         { property: "ViewMode", group: "lcd", label: "Ansicht", type: "combobox", values: ["Dashboard", "Clock", "Bars", "Test Pattern"], default: "Dashboard" },
+        { property: "HeaderText", group: "lcd", label: "Überschrift", type: "textfield", default: "SYSTEM MONITOR" },
+        { property: "ClockStyle", group: "lcd", label: "Uhrformat", type: "combobox", values: ["24 Stunden", "12 Stunden"], default: "24 Stunden" },
+        { property: "ShowClock", group: "widgets", label: "Uhr anzeigen", type: "boolean", default: true },
+        { property: "ShowCPU", group: "widgets", label: "CPU anzeigen", type: "boolean", default: true },
+        { property: "ShowRAM", group: "widgets", label: "Arbeitsspeicher anzeigen", type: "boolean", default: true },
         { property: "AccentColor", group: "lcd", label: "Akzentfarbe", type: "color", default: "#42D6C5" },
         { property: "BackgroundColor", group: "lcd", label: "Hintergrund", type: "color", default: "#10151B" },
         { property: "TargetFPS", group: "lcd", label: "Bildrate", type: "number", min: "1", max: "15", default: "8" },
@@ -51,6 +56,11 @@ export function Render() {
         service: SERVICE_ID,
         command: "configure",
         mode: String(ViewMode || "Dashboard"),
+        headerText: String(HeaderText || "SYSTEM MONITOR").slice(0, 22),
+        clockStyle: String(ClockStyle || "24 Stunden"),
+        showClock: ShowClock !== false && ShowClock !== "0",
+        showCpu: ShowCPU !== false && ShowCPU !== "0",
+        showRam: ShowRAM !== false && ShowRAM !== "0",
         accent: normalizeColor(AccentColor, "#42D6C5"),
         background: normalizeColor(BackgroundColor, "#10151B"),
         fps: clamp(Number(TargetFPS), 1, 15, 8),

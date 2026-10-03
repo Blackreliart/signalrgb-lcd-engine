@@ -1,36 +1,35 @@
-# Independent LCD Engine – SignalRGB Add-on
+# Independent LCD Engine — SignalRGB Add-on
 
-Add-on package layout for **Settings → Add-ons**. This repository integration is a Network/Discovery service, not a USB device plugin, so the service controller can appear under SignalRGB's Third Party Services area.
+Dieses Add-on erscheint als Network/Discovery-Service unter **Third Party Services**. Das Add-on übergibt Einstellungen an den lokalen Renderer; der Renderer liest CPU/RAM aus Windows und sendet geänderte RGB565-Bilder mit niedriger Bildrate an das LCD.
 
-## Components
+## Anpassungen in SignalRGB
 
-- `SignalRGB_LCD_Engine.js` — SignalRGB network add-on and local service discovery/controller.
-- `SignalRGB_LCD_Engine.qml` — settings page for discovery state and linked LCD service.
-- `service/lcd_engine_service.py` — local helper. It detects the LCD over HID, renders independent faces, and sends frames directly to the screen.
+Öffne **Third Party Services → Independent LCD Engine → Einstellungen**. Dort kannst du einstellen:
 
-The helper is separate because the SignalRGB Network/Discovery add-on does not itself claim a USB HID endpoint. It communicates with the helper through loopback UDP. The renderer and transport do not call `@SignalRGB/lcd`.
+- Anzeige: Dashboard, Uhr, Systembalken oder Testbild
+- eigene Überschrift und 12-/24-Stunden-Uhr
+- Uhr, CPU und RAM einzeln ein- und ausblenden
+- Akzent- und Hintergrundfarbe
+- Helligkeit und Bildrate (1–15 FPS)
 
-## Install through SignalRGB Add-ons
+Die Werte werden vom lokalen Renderer übernommen. CPU/RAM werden über psutil höchstens einmal pro Sekunde gelesen; HID-Bilder werden nur übertragen, wenn sich das Bild geändert hat.
 
-SignalRGB's Add-ons page accepts a repository URL. This folder must first be published as a Git repository (GitLab or another supported Git host); then add that repository URL at **Settings → Add-ons → Add** and restart SignalRGB if prompted. A local folder path is not a repository URL.
+## Einrichtung
 
-Start the helper with Python before launching the add-on:
+Das Add-on-Repository wird in SignalRGB unter **Settings → Add-ons** hinzugefügt. Der lokale Hilfsdienst muss separat gestartet werden:
 
 ```powershell
 python -m pip install -r service/requirements.txt
 python service/lcd_engine_service.py
 ```
 
-The helper must eventually be packaged/installed as a background Windows service for automatic startup. The current source version is foreground/manual and intended for integration development.
+Nach Änderungen am Add-on muss die aktualisierte Version ins GitHub-Repository gepusht und in SignalRGB neu geladen werden. Nach Änderungen am Python-Helfer muss dessen lokale Datei ersetzt und der Prozess neu gestartet werden.
 
-## Current state and constraints
+## Dateien
 
-- The service plug-in uses SignalRGB's `Type() { return "network"; }` and `DiscoveryService()` pattern used by existing SignalRGB add-ons.
-- The local HID protocol is adapted from the named `Thermalright_Frozen_Warframe_0416_5302.js` source; `@SignalRGB/lcd` frame acquisition was removed. VID/PID, usage page, usage, packet envelope, RGB565 format, and handshake remain specific to that source's device.
-- This is not a general driver for arbitrary LCD hardware. Extending it to other LCDs requires additional protocol adapters.
-- SignalRGB's public docs explain adding third-party devices and USB plugins, but the DiscoveryService add-on contract is not comprehensively documented. Validate it against the installed SignalRGB release.
-- This source package has not been tested against the physical LCD or installed in SignalRGB.
+- `SignalRGB_LCD_Engine.js` — SignalRGB-Service und anpassbare Controls.
+- `SignalRGB_LCD_Engine.qml` — Beschreibung/Hinweis im Add-on.
+- `service/lcd_engine_service.py` — Layouts, Systemwerte und HID-Transport.
+- `service/requirements.txt` — Python-Abhängigkeiten (`hidapi`, Pillow, psutil).
 
-## Files
-
-Add-on files live at repository root so SignalRGB's Add-ons loader can find the JS and QML by name.
+Der HID-Adapter verwendet das Protokoll aus der Thermalright-Referenz (VID/PID `0416:5302`). Er ist nicht generisch für andere LCDs. Der lokale Dienst muss während der Nutzung laufen.

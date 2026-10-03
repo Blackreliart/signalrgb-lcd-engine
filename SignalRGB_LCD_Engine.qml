@@ -23,7 +23,7 @@ Item {
                 Label {
                     Layout.fillWidth: true
                     color: "#42D6C5"
-                    text: "Start the local helper at 127.0.0.1:41720. Once detected, the LCD appears in Third Party Services."
+                    text: "Select the LCD under Third Party Services, then customize its view, clock, CPU/RAM widgets, colors, brightness and frame rate in the service settings."
                 }
             }
         }
