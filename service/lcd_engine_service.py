@@ -1,8 +1,7 @@
-"""Low-rate renderer and HID transport for the reference 0x0416:0x5302 LCD.
+"""Low-rate renderer and UDP bridge for the SignalRGB LCD device plugin.
 
-This process is deliberately separate from SignalRGB's device plugin API. It
-accepts small JSON settings datagrams from the SignalRGB network add-on and
-owns the HID interface while running.
+The Thermalright device plugin owns the HID interface and relays canvas samples
+and completed RGB565 frames over loopback UDP. This helper never opens HID.
 """
 from __future__ import annotations
 
@@ -11,6 +10,7 @@ import base64
 import io
 import os
 import socket
+import struct
 import shutil
 import subprocess
 import threading
@@ -18,11 +18,6 @@ import time
 from dataclasses import dataclass, field
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-
-try:
-    import hid  # provided by the hidapi package
-except ImportError:  # graceful startup allows installation/configuration first
-    hid = None
 
 try:
     from PIL import Image, ImageDraw, ImageFont, ImageOps
@@ -34,14 +29,12 @@ try:
 except ImportError:
     psutil = None
 
-VID, PID = 0x0416, 0x5302
-USAGE_PAGE, USAGE = 0xFF06, 0x0001
 WIDTH, HEIGHT = 240, 320
 FRAME_BYTES = WIDTH * HEIGHT * 2
-REPORT_BYTES = 512
-MAGIC = bytes((0xDA, 0xDB, 0xDC, 0xDD))
 UDP_HOST, UDP_PORT, REPLY_PORT = "127.0.0.1", 41720, 41721
 EDITOR_PORT = 41722
+PLUGIN_PORT = 41723
+BRIDGE_CHUNK_BYTES = 1200
 
 
 @dataclass
@@ -282,7 +275,9 @@ def render(settings: Settings, now: float, cpu_percent: float = 0.0, ram_percent
     if Image is None:
         raise RuntimeError("Pillow fehlt. Installiere service/requirements.txt.")
     canvas_width, canvas_height = (HEIGHT, WIDTH) if settings.rotation in (90, 270) else (WIDTH, HEIGHT)
-    if settings.background_mode == "SignalRGB Effect" and settings.effect_width * settings.effect_height * 3 == len(settings.effect_colors):
+    effect_fresh = settings.effect_received_at > 0 and time.monotonic() - settings.effect_received_at < 2.0
+    if (settings.background_mode == "SignalRGB Effect" and settings.capture_signalrgb and effect_fresh
+            and settings.effect_width * settings.effect_height * 3 == len(settings.effect_colors)):
         effect = bytes(max(0, min(255, int(value))) for value in settings.effect_colors)
         image = Image.frombytes("RGB", (settings.effect_width, settings.effect_height), effect).resize((canvas_width, canvas_height), Image.Resampling.BILINEAR)
     elif settings.background_mode == "Image" and settings.background_image:
@@ -442,87 +437,8 @@ def read_nvidia_gpu() -> tuple[float | None, float | None, float | None, float |
         return None, None, None, None
 
 
-class HidDisplay:
-    def __init__(self):
-        self.device = None
-        self.next_scan = 0.0
-
-    def open(self) -> bool:
-        if hid is None:
-            print("hidapi is missing; run: python -m pip install -r service/requirements.txt")
-            return False
-        candidates = hid.enumerate(VID, PID)
-        if not candidates:
-            print(f"No HID device with VID:PID {VID:04X}:{PID:04X} was enumerated.")
-            return False
-        for info in candidates:
-            if info.get("usage_page") != USAGE_PAGE or info.get("usage") != USAGE:
-                print("Ignoring HID interface with unexpected usage:", info.get("usage_page"), info.get("usage"), info.get("interface_number"))
-                continue
-            try:
-                print(f"Opening LCD HID interface {VID:04X}:{PID:04X}, usage page {USAGE_PAGE:04X}, usage {USAGE:04X}...")
-                candidate = hid.device()
-                candidate.open_path(info["path"])
-                if self._handshake(candidate):
-                    self.device = candidate
-                    print("Reference LCD connected and handshake accepted.")
-                    return True
-                print("HID interface opened, but the LCD did not accept the expected handshake.")
-                candidate.close()
-            except Exception as exc:
-                print(f"Could not open/use candidate HID endpoint: {type(exc).__name__}: {exc}")
-        return False
-
-    @staticmethod
-    def _handshake(device) -> bool:
-        report = bytearray(REPORT_BYTES + 1)
-        report[1:5] = MAGIC
-        report[13] = 1
-        for _ in range(3):
-            device.write(report)
-            response = device.read(36, 500)
-            # hidapi commonly strips report ID 0 on Windows, while SignalRGB's
-            # device.read() returns it at index 0. Accept and normalize either.
-            offset = 1 if len(response) >= 18 and bytes(response[1:5]) == MAGIC else 0
-            if (len(response) >= offset + 17
-                    and bytes(response[offset:offset + 4]) == MAGIC
-                    and response[offset + 12] == 1
-                    and response[offset + 16] == 0x10):
-                print("LCD handshake accepted.")
-                return True
-            if response:
-                print("Unexpected LCD handshake reply:", bytes(response[:min(len(response), 24)]).hex(" "))
-            else:
-                print("LCD handshake timed out (no HID reply).")
-            time.sleep(0.25)
-        return False
-
-    def send_frame(self, pixels: bytes) -> None:
-        if self.device is None:
-            return
-        header = bytearray(20)
-        header[:4] = MAGIC
-        header[4:8] = bytes((2, 0, 1, 0))
-        header[8:10] = WIDTH.to_bytes(2, "little")
-        header[10:12] = HEIGHT.to_bytes(2, "little")
-        header[12:16] = bytes((2, 0, 0, 0))
-        header[16:20] = FRAME_BYTES.to_bytes(4, "little")
-        data = bytes(header) + pixels
-        data += bytes((-len(data)) % REPORT_BYTES)
-        for offset in range(0, len(data), REPORT_BYTES):
-            self.device.write(bytes((0,)) + data[offset:offset + REPORT_BYTES])
-
-    def close(self):
-        if self.device is not None:
-            try:
-                self.device.close()
-            finally:
-                self.device = None
-
-
 def main():
     settings = Settings()
-    display = HidDisplay()
     sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     sock.bind((UDP_HOST, UDP_PORT))
     sock.settimeout(0.2)
@@ -534,6 +450,8 @@ def main():
     ram_percent = 0.0
     last_metrics = 0.0
     last_gpu_metrics = 0.0
+    bridge_last_seen = 0.0
+    outgoing_frame_id = 0
     print(f"LCD Engine helper listening on {UDP_HOST}:{UDP_PORT}")
     try:
         while True:
@@ -542,7 +460,14 @@ def main():
                 raw, _addr = sock.recvfrom(8192)
                 message = json.loads(raw.decode("utf-8"))
                 command = message.get("command")
-                if command == "effect-frame":
+                if command == "bridge-ready":
+                    if time.monotonic() - bridge_last_seen >= 3.0:
+                        previous = None
+                    bridge_last_seen = time.monotonic()
+                elif command == "effect-frame":
+                    if time.monotonic() - bridge_last_seen >= 3.0:
+                        previous = None
+                    bridge_last_seen = time.monotonic()
                     width = int(message.get("width", 0))
                     height = int(message.get("height", 0))
                     colors = message.get("colors", [])
@@ -568,7 +493,7 @@ def main():
                     settings.show_cpu = message.get("showCpu", True) not in (False, "false", "0", 0)
                     settings.show_ram = message.get("showRam", True) not in (False, "false", "0", 0)
                 elif command == "disconnect":
-                    display.close()
+                    bridge_last_seen = 0.0
                 elif command == "discover":
                     pass
             except socket.timeout:
@@ -577,13 +502,11 @@ def main():
                 print(f"Ignoring malformed settings datagram: {exc}")
 
             if now - last_discovery >= 1:
-                if display.device is None and now >= display.next_scan:
-                    display.open()
-                    display.next_scan = now + 5.0
+                bridge_connected = now - bridge_last_seen < 3.0
                 reply = {"service": "independent-lcd-engine-local", "command": "device",
-                         "connected": display.device is not None,
+                         "connected": bridge_connected,
                          "captureSignalRGB": settings.capture_signalrgb,
-                         "name": "Independent LCD Engine", "model": "0416:5302 reference HID"}
+                         "name": "Independent LCD Engine", "model": "Thermalright LCD bridge"}
                 try:
                     sock.sendto(json.dumps(reply).encode("utf-8"), (UDP_HOST, REPLY_PORT))
                 except OSError:
@@ -596,7 +519,7 @@ def main():
                 last_gpu_metrics = now
 
             interval = 1.0 / max(1, settings.fps)
-            if display.device is not None and now - last_frame >= interval:
+            if now - bridge_last_seen < 3.0 and now - last_frame >= interval:
                 try:
                     if psutil is not None and now - last_metrics >= 1.0:
                         cpu_percent = psutil.cpu_percent(interval=None)
@@ -604,17 +527,21 @@ def main():
                         last_metrics = now
                     frame = render(settings, now, cpu_percent, ram_percent)
                     if frame != previous:
-                        display.send_frame(frame)
+                        outgoing_frame_id = (outgoing_frame_id + 1) & 0xFFFFFFFF
+                        packet_count = (len(frame) + BRIDGE_CHUNK_BYTES - 1) // BRIDGE_CHUNK_BYTES
+                        for part in range(packet_count):
+                            start = part * BRIDGE_CHUNK_BYTES
+                            payload = frame[start:start + BRIDGE_CHUNK_BYTES]
+                            packet = struct.pack("<4sIHH", b"ILCD", outgoing_frame_id, part, packet_count) + payload
+                            sock.sendto(packet, (UDP_HOST, PLUGIN_PORT))
                         previous = frame
                     last_frame = now
                 except Exception as exc:
-                    print(f"Frame render/transfer failed; reconnecting: {exc}")
-                    display.close()
+                    print(f"Frame render/bridge failed: {exc}")
                     previous = None
     except KeyboardInterrupt:
         print("Stopping LCD Engine helper.")
     finally:
-        display.close()
         sock.close()
 
 

@@ -14,8 +14,8 @@ Item {
                 try {
                     var state = JSON.parse(request.responseText)
                     loadingCaptureState = true
-                    captureSwitch.checked = false
-                    captureStatus.text = "Canvas-Erfassung nicht verfügbar: Third Party Services erhalten kein device.color(). Dafür wäre ein separates Geräteplugin nötig."
+                    captureSwitch.checked = !!state.captureSignalRGB
+                    captureStatus.text = state.captureSignalRGB ? (state.effectActive ? "SignalRGB-Canvas wird über das Thermalright-Geräteplugin empfangen." : "Erfassung aktiviert. Prüfe, ob das Thermalright-Geräteplugin läuft.") : "Erfassung ausgeschaltet."
                     loadingCaptureState = false
                 } catch (error) {
                     captureStatus.text = "Helper-Antwort konnte nicht gelesen werden"
@@ -64,19 +64,19 @@ Item {
                     Layout.fillWidth: true
                     wrapMode: Text.WordWrap
                     color: "#AAB9C4"
-                    text: "This add-on discovers the local LCD Engine helper. The helper owns rendering and USB/HID frame transfer."
+                    text: "This add-on discovers the local helper. The Thermalright device plugin owns HID; the helper renders and exchanges frames over loopback UDP."
                 }
                 Label {
                     Layout.fillWidth: true
                     color: "#42D6C5"
-                    text: "Use the switch below to keep sending the live SignalRGB canvas. The visual editor configures rotation, layout, backgrounds and widgets."
+                    text: "Use the switch to use the live SignalRGB canvas as the LCD background. The visual editor configures rotation, layout, backgrounds and widgets."
                 }
                 RowLayout {
                     Layout.fillWidth: true
                     CheckBox {
                         id: captureSwitch
-                        text: "SignalRGB-Effekt erfassen (nicht verfügbar)"
-                        enabled: false
+                        text: "SignalRGB-Effekt erfassen"
+                        enabled: true
                         onToggled: setCaptureState(checked)
                     }
                 }
