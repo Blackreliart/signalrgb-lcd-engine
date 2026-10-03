@@ -19,6 +19,14 @@ let effectCaptureEnabled = false;
 function sampleAndSendEffect() {
     const now = Date.now();
     if (!effectCaptureEnabled || now - lastEffectSend < EFFECT_RATE_MS) return;
+    if (typeof device === "undefined" || !device || typeof device.color !== "function") {
+        if (!effectSamplingErrorLogged) {
+            service.log(`${SERVICE_NAME}: SignalRGB canvas capture is unavailable in a Third Party Service. device.color() is only provided in a device-plugin render context.`);
+            effectSamplingErrorLogged = true;
+        }
+        effectCaptureEnabled = false;
+        return;
+    }
     lastEffectSend = now;
     const colors = [];
     try {

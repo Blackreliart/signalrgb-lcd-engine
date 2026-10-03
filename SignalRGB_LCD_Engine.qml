@@ -14,8 +14,8 @@ Item {
                 try {
                     var state = JSON.parse(request.responseText)
                     loadingCaptureState = true
-                    captureSwitch.checked = !!state.captureSignalRGB
-                    captureStatus.text = state.effectActive ? "Live-Canvas wird laufend empfangen" : (state.captureSignalRGB ? "Erfassung aktiv – starte SignalRGB-Effekt" : "Erfassung ausgeschaltet")
+                    captureSwitch.checked = false
+                    captureStatus.text = "Canvas-Erfassung nicht verfügbar: Third Party Services erhalten kein device.color(). Dafür wäre ein separates Geräteplugin nötig."
                     loadingCaptureState = false
                 } catch (error) {
                     captureStatus.text = "Helper-Antwort konnte nicht gelesen werden"
@@ -75,7 +75,8 @@ Item {
                     Layout.fillWidth: true
                     CheckBox {
                         id: captureSwitch
-                        text: "SignalRGB-Effekt dauerhaft erfassen"
+                        text: "SignalRGB-Effekt erfassen (nicht verfügbar)"
+                        enabled: false
                         onToggled: setCaptureState(checked)
                     }
                 }

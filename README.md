@@ -11,7 +11,7 @@ The SignalRGB integration is a Network/Discovery service shown under **Third Par
 - Background: solid color, directional two-color gradient, uploaded image, or sampled SignalRGB effect
 - Image fit (cover/contain/stretch), background dimming, brightness, and 1–15 FPS
 
-The add-on page has a **SignalRGB-Effekt dauerhaft erfassen** switch. It writes the capture setting directly to the helper and polls its live status. You can also change the same setting in the editor under **Hintergrund → SignalRGB-Effekt erfassen**. With capture enabled, the add-on samples a 16×20 grid from `device.color(x,y)` and continuously sends frames at up to 8 FPS while its render/discovery loop is active. This is a low-resolution color sample, not a full-resolution LCD frame.
+SignalRGB canvas capture is unavailable in this Third Party Service: SignalRGB does not provide the device-plugin `device.color()` object in this service context. The UI marks the option as unavailable instead of pretending frames are being captured. Canvas sampling would require a separate device plugin, which would be listed as a device rather than under Third Party Services.
 
 GPU widgets are available in the editor for utilization, temperature, memory, and a utilization bar. The helper reads all four metrics from `nvidia-smi` when present. Without NVIDIA tools it falls back to the Windows WDDM 3D utilization counter; temperature and VRAM then display as unavailable. GPU polling runs every two seconds.
 
