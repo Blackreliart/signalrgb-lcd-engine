@@ -4,6 +4,52 @@ import QtQuick.Layouts
 
 Item {
     anchors.fill: parent
+    property bool loadingCaptureState: false
+
+    function readCaptureState() {
+        var request = new XMLHttpRequest()
+        request.open("GET", "http://127.0.0.1:41722/config")
+        request.onreadystatechange = function() {
+            if (request.readyState === XMLHttpRequest.DONE && request.status === 200) {
+                try {
+                    var state = JSON.parse(request.responseText)
+                    loadingCaptureState = true
+                    captureSwitch.checked = !!state.captureSignalRGB
+                    captureStatus.text = state.effectActive ? "Live-Canvas wird laufend empfangen" : (state.captureSignalRGB ? "Erfassung aktiv – starte SignalRGB-Effekt" : "Erfassung ausgeschaltet")
+                    loadingCaptureState = false
+                } catch (error) {
+                    captureStatus.text = "Helper-Antwort konnte nicht gelesen werden"
+                }
+            } else if (request.readyState === XMLHttpRequest.DONE) {
+                captureStatus.text = "Helper nicht erreichbar – lcd_engine_service.py starten"
+            }
+        }
+        request.send()
+    }
+
+    function setCaptureState(enabled) {
+        if (loadingCaptureState) return
+        var request = new XMLHttpRequest()
+        request.open("POST", "http://127.0.0.1:41722/config")
+        request.setRequestHeader("Content-Type", "application/json")
+        request.onreadystatechange = function() {
+            if (request.readyState === XMLHttpRequest.DONE) {
+                if (request.status === 200) readCaptureState()
+                else captureStatus.text = "Speichern fehlgeschlagen – Helper prüfen"
+            }
+        }
+        request.send(JSON.stringify({captureSignalRGB: enabled}))
+    }
+
+    Timer {
+        interval: 1500
+        running: true
+        repeat: true
+        onTriggered: readCaptureState()
+    }
+
+    Component.onCompleted: readCaptureState()
+
     ColumnLayout {
         anchors.fill: parent
         spacing: 12
@@ -23,7 +69,22 @@ Item {
                 Label {
                     Layout.fillWidth: true
                     color: "#42D6C5"
-                    text: "Use the visual editor for layout, automatic scaling, rotation, backgrounds, widget styling and SignalRGB effect capture."
+                    text: "Use the switch below to keep sending the live SignalRGB canvas. The visual editor configures rotation, layout, backgrounds and widgets."
+                }
+                RowLayout {
+                    Layout.fillWidth: true
+                    CheckBox {
+                        id: captureSwitch
+                        text: "SignalRGB-Effekt dauerhaft erfassen"
+                        onToggled: setCaptureState(checked)
+                    }
+                }
+                Label {
+                    id: captureStatus
+                    Layout.fillWidth: true
+                    wrapMode: Text.WordWrap
+                    color: "#AAB9C4"
+                    text: "Prüfe lokalen Helper …"
                 }
                 Button {
                     text: "LCD Editor öffnen"

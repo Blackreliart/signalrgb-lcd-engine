@@ -16,8 +16,32 @@ let lastEffectSend = 0;
 let effectSamplingErrorLogged = false;
 let effectCaptureEnabled = false;
 
+function sampleAndSendEffect() {
+    const now = Date.now();
+    if (!effectCaptureEnabled || now - lastEffectSend < EFFECT_RATE_MS) return;
+    lastEffectSend = now;
+    const colors = [];
+    try {
+        for (let y = 0; y < EFFECT_HEIGHT; y++) {
+            for (let x = 0; x < EFFECT_WIDTH; x++) {
+                const color = device.color(x, y);
+                colors.push(color[0], color[1], color[2]);
+            }
+        }
+        udp.send(HELPER_IP, HELPER_PORT, JSON.stringify({
+            service: SERVICE_ID, command: "effect-frame",
+            width: EFFECT_WIDTH, height: EFFECT_HEIGHT, colors: colors
+        }));
+    } catch (error) {
+        if (!effectSamplingErrorLogged) {
+            service.log(`${SERVICE_NAME}: current effect sampling unavailable: ${error}`);
+            effectSamplingErrorLogged = true;
+        }
+    }
+}
+
 export function Name() { return SERVICE_NAME; }
-export function Version() { return "0.1.0"; }
+export function Version() { return "0.2.0"; }
 export function Publisher() { return "Independent LCD Engine"; }
 export function Type() { return "network"; }
 export function Size() { return [EFFECT_WIDTH, EFFECT_HEIGHT]; }
@@ -36,28 +60,7 @@ export function Initialize() {
 }
 
 export function Render() {
-    const now = Date.now();
-    if (effectCaptureEnabled && now - lastEffectSend >= EFFECT_RATE_MS) {
-        lastEffectSend = now;
-        const colors = [];
-        try {
-            for (let y = 0; y < EFFECT_HEIGHT; y++) {
-                for (let x = 0; x < EFFECT_WIDTH; x++) {
-                    const color = device.color(x, y);
-                    colors.push(color[0], color[1], color[2]);
-                }
-            }
-            udp.send(HELPER_IP, HELPER_PORT, JSON.stringify({
-                service: SERVICE_ID, command: "effect-frame",
-                width: EFFECT_WIDTH, height: EFFECT_HEIGHT, colors: colors
-            }));
-        } catch (error) {
-            if (!effectSamplingErrorLogged) {
-                service.log(`${SERVICE_NAME}: current effect sampling unavailable: ${error}`);
-                effectSamplingErrorLogged = true;
-            }
-        }
-    }
+    sampleAndSendEffect();
 }
 
 export function Shutdown() {
@@ -76,6 +79,9 @@ export function DiscoveryService() {
     };
 
     this.Update = function() {
+        // Keep streaming while the service discovery loop is alive as well as
+        // during Render; the timer limits this to eight low-resolution frames/s.
+        sampleAndSendEffect();
         const now = Date.now();
         if (now - lastDiscoverySend < DISCOVERY_RATE_MS) return;
         lastDiscoverySend = now;

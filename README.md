@@ -11,7 +11,9 @@ The SignalRGB integration is a Network/Discovery service shown under **Third Par
 - Background: solid color, directional two-color gradient, uploaded image, or sampled SignalRGB effect
 - Image fit (cover/contain/stretch), background dimming, brightness, and 1–15 FPS
 
-Click **LCD Editor öffnen** in the add-on page or visit the local editor URL while the helper is running. The SignalRGB effect capture toggle is in the editor under **Hintergrund → SignalRGB-Effekt erfassen**; it is not a SignalRGB add-on control. The helper reflects that toggle to the SignalRGB service through its discovery response. When enabled, the add-on samples a 16×20 grid from `device.color(x,y)` at up to 8 FPS. It is a low-bandwidth color sample, not a full-resolution LCD frame.
+The add-on page has a **SignalRGB-Effekt dauerhaft erfassen** switch. It writes the capture setting directly to the helper and polls its live status. You can also change the same setting in the editor under **Hintergrund → SignalRGB-Effekt erfassen**. With capture enabled, the add-on samples a 16×20 grid from `device.color(x,y)` and continuously sends frames at up to 8 FPS while its render/discovery loop is active. This is a low-resolution color sample, not a full-resolution LCD frame.
+
+GPU widgets are available in the editor for utilization, temperature, memory, and a utilization bar. The helper reads all four metrics from `nvidia-smi` when present. Without NVIDIA tools it falls back to the Windows WDDM 3D utilization counter; temperature and VRAM then display as unavailable. GPU polling runs every two seconds.
 
 The editor stores configuration at `%LOCALAPPDATA%\\IndependentLCDEngine\\config.json`. The editor only binds to loopback (`127.0.0.1`).
 
