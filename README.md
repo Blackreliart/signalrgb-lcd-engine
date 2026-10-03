@@ -1,35 +1,37 @@
 # Independent LCD Engine — SignalRGB Add-on
 
-Dieses Add-on erscheint als Network/Discovery-Service unter **Third Party Services**. Das Add-on übergibt Einstellungen an den lokalen Renderer; der Renderer liest CPU/RAM aus Windows und sendet geänderte RGB565-Bilder mit niedriger Bildrate an das LCD.
+The SignalRGB integration is a Network/Discovery service shown under **Third Party Services**. A local Python helper owns USB/HID rendering and serves the visual editor at `http://127.0.0.1:41722/`.
 
-## Anpassungen in SignalRGB
+## Editor features
 
-Öffne **Third Party Services → Independent LCD Engine → Einstellungen**. Dort kannst du einstellen:
+- Responsive preview and automatic widget-coordinate scaling when switching portrait/landscape rotation
+- Rotation: 0°, 90°, 180°, or 270°; safe margins and global font scaling
+- Drag, add, remove, position, show/hide, recolor and resize up to 12 widgets
+- Widgets: title, clock, date, CPU/RAM values and bars, computer name, uptime, and custom text
+- Background: solid color, directional two-color gradient, uploaded image, or sampled SignalRGB effect
+- Image fit (cover/contain/stretch), background dimming, brightness, and 1–15 FPS
 
-- Anzeige: Dashboard, Uhr, Systembalken oder Testbild
-- eigene Überschrift und 12-/24-Stunden-Uhr
-- Uhr, CPU und RAM einzeln ein- und ausblenden
-- Akzent- und Hintergrundfarbe
-- Helligkeit und Bildrate (1–15 FPS)
+Click **LCD Editor öffnen** in the add-on page or visit the local editor URL while the helper is running. The SignalRGB effect capture toggle is in the editor under **Hintergrund → SignalRGB-Effekt erfassen**; it is not a SignalRGB add-on control. The helper reflects that toggle to the SignalRGB service through its discovery response. When enabled, the add-on samples a 16×20 grid from `device.color(x,y)` at up to 8 FPS. It is a low-bandwidth color sample, not a full-resolution LCD frame.
 
-Die Werte werden vom lokalen Renderer übernommen. CPU/RAM werden über psutil höchstens einmal pro Sekunde gelesen; HID-Bilder werden nur übertragen, wenn sich das Bild geändert hat.
+The editor stores configuration at `%LOCALAPPDATA%\\IndependentLCDEngine\\config.json`. The editor only binds to loopback (`127.0.0.1`).
 
-## Einrichtung
+## Start the helper
 
-Das Add-on-Repository wird in SignalRGB unter **Settings → Add-ons** hinzugefügt. Der lokale Hilfsdienst muss separat gestartet werden:
+From the local repository root:
 
 ```powershell
 python -m pip install -r service/requirements.txt
 python service/lcd_engine_service.py
 ```
 
-Nach Änderungen am Add-on muss die aktualisierte Version ins GitHub-Repository gepusht und in SignalRGB neu geladen werden. Nach Änderungen am Python-Helfer muss dessen lokale Datei ersetzt und der Prozess neu gestartet werden.
+Keep it running. Push the updated repository files to GitHub and reload the add-on in SignalRGB. Restart the Python helper after replacing local helper files.
 
-## Dateien
+## Files and limits
 
-- `SignalRGB_LCD_Engine.js` — SignalRGB-Service und anpassbare Controls.
-- `SignalRGB_LCD_Engine.qml` — Beschreibung/Hinweis im Add-on.
-- `service/lcd_engine_service.py` — Layouts, Systemwerte und HID-Transport.
-- `service/requirements.txt` — Python-Abhängigkeiten (`hidapi`, Pillow, psutil).
+- `SignalRGB_LCD_Engine.js` — Network/Discovery integration and optional SignalRGB canvas sampler.
+- `SignalRGB_LCD_Engine.qml` — add-on page with editor launch button.
+- `service/editor.html` — visual editor.
+- `service/lcd_engine_service.py` — editor API, renderer and HID transport.
+- `service/requirements.txt` — `hidapi`, Pillow and psutil.
 
-Der HID-Adapter verwendet das Protokoll aus der Thermalright-Referenz (VID/PID `0416:5302`). Er ist nicht generisch für andere LCDs. Der lokale Dienst muss während der Nutzung laufen.
+The HID protocol adapter is specific to reference device `VID:PID 0416:5302`; it is not a universal LCD driver. The live effect preview in the editor is illustrative; the LCD renders the actual sampled grid after capture is enabled.

@@ -23,7 +23,11 @@ Item {
                 Label {
                     Layout.fillWidth: true
                     color: "#42D6C5"
-                    text: "Select the LCD under Third Party Services, then customize its view, clock, CPU/RAM widgets, colors, brightness and frame rate in the service settings."
+                    text: "Use the visual editor for layout, automatic scaling, rotation, backgrounds, widget styling and SignalRGB effect capture."
+                }
+                Button {
+                    text: "LCD Editor öffnen"
+                    onClicked: Qt.openUrlExternally("http://127.0.0.1:41722/")
                 }
             }
         }
